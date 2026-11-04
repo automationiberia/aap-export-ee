@@ -1,0 +1,11 @@
+# Runtime final
+git [platform:rpm]
+rsync [platform:rpm]
+systemd-libs [platform:rpm]
+
+# Solo para la fase de compilación (builder stage)
+gcc [platform:rpm compile]
+make [platform:rpm compile]
+pkgconf-pkg-config [platform:rpm compile]
+systemd-devel [platform:rpm compile]
+python3.12-devel [platform:rpm compile]

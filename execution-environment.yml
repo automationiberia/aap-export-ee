@@ -1,0 +1,34 @@
+---
+version: 3
+
+images:
+  base_image:
+    name: registry.redhat.io/ansible-automation-platform-26/ee-minimal-rhel9:latest
+
+dependencies:
+  galaxy: requirements.yml
+  python: requirements.txt
+  system: bindep.txt
+
+additional_build_files:
+  - src: ansible.cfg
+    dest: configs
+
+additional_build_steps:
+  prepend_galaxy:
+    - COPY _build/configs/ansible.cfg /etc/ansible/ansible.cfg
+    - ENV ANSIBLE_CONFIG=/etc/ansible/ansible.cfg
+  prepend_builder:
+    - ENV PYCMD=/usr/bin/python3.12
+    - ENV PIPCMD="/usr/bin/python3.12 -m pip"
+    - RUN ln -sf /usr/bin/python3.12 /usr/bin/python3
+  prepend_final:
+    - ENV PYCMD=/usr/bin/python3.12
+    - ENV PIPCMD="/usr/bin/python3.12 -m pip"
+    - RUN ln -sf /usr/bin/python3.12 /usr/bin/python3
+  append_final:
+    - RUN ln -sf /usr/bin/python3.12 /usr/bin/python3
+    # FIX 1: Corregir leading slash en infra.aap_configuration_extended
+    - RUN sed -i "s|'/api/gateway/v1/role_definitions/'|'api/gateway/v1/role_definitions/'|g" /usr/share/ansible/collections/ansible_collections/infra/aap_configuration_extended/roles/filetree_create/tasks/gateway_role_definitions.yml
+    # FIX 2: Añadir self.retryable = False en PlatformError para evitar enmascarar excepciones en ansible.platform
+    - RUN python3 -c 'path="/usr/share/ansible/collections/ansible_collections/ansible/platform/plugins/plugin_utils/platform/exceptions.py"; f=open(path,"r"); c=f.read(); f.close(); c=c.replace("self.details = details or {}", "self.details = details or {}\n        self.retryable = False", 1); f=open(path,"w"); f.write(c); f.close()'
