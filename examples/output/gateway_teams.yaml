@@ -1,0 +1,14 @@
+---
+aap_teams:
+  - name: "fin-operadores"
+    description: |-
+      {%- raw -%}
+      Operadores que lanzan los job templates de Finanzas
+      {%- endraw -%}
+    organization: "Finanzas"
+  - name: "ops-admins"
+    description: |-
+      {%- raw -%}
+      {%- endraw -%}
+    organization: "Operaciones"
+...

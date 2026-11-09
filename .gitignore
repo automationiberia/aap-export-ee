@@ -7,3 +7,6 @@ ansible.cfg
 *.log
 aap-export-output/
 *.token
+.env
+*-artifact-*.json
+ansible-navigator.log

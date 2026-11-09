@@ -1,8 +1,17 @@
 ---
+# Versiones fijadas a las incluidas en quay.io/automationiberia/aap-export-ee:2.6.0.
+# Los hotfixes de execution-environment.yml estan validados contra estas versiones:
+# si las subes, revisa que sigan aplicando (el build falla si no).
 collections:
   - name: infra.aap_configuration_extended
+    version: "4.13.0"
   - name: infra.aap_configuration
+    version: "4.11.0"
   - name: ansible.controller
+    version: "4.8.12"
   - name: ansible.platform
+    version: "2.7.20260930"
   - name: ansible.hub
+    version: "1.1.2"
   - name: ansible.eda
+    version: "2.13.0"

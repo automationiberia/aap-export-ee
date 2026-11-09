@@ -1,0 +1,8 @@
+---
+# Stub of environment / secret variables discovered in the filetree export.
+# Fill in PRO (or target) values, optionally encrypt with ansible-vault, then pass:
+#   ansible-playbook ... -e @env_variables.yml
+#
+vaulted_gateway_users_admin_password: CHANGE_ME
+vaulted_gateway_users_ana_garcia_password: CHANGE_ME
+vaulted_gateway_users_svc_cicd_password: CHANGE_ME

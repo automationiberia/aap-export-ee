@@ -1,0 +1,14 @@
+---
+gateway_organizations:
+  - name: "Default"
+    description: |-
+      {%- raw -%}
+      The default organization for Ansible Automation Platform
+      {%- endraw -%}
+  - name: "Finanzas"
+    description: |-
+      {%- raw -%}
+      Automatizaciones del area de Finanzas
+      {%- endraw -%}
+  - name: "Operaciones"
+...

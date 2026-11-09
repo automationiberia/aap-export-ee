@@ -1,0 +1,43 @@
+---
+- name: Exportar Usuarios, Equipos y Permisos RBAC desde AAP 2.6 Gateway
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    output_path: "/output_data"
+
+    # Parametros de conexion contra AAP 2.6.
+    # Prioridad: -e controller_* > variables de entorno CONTROLLER_*
+    # (usar variables de entorno evita que el token quede en el historial de bash)
+    aap_hostname: "{{ controller_hostname | default(lookup('env', 'CONTROLLER_HOST'), true) }}"
+    aap_token: "{{ controller_oauthtoken | default(lookup('env', 'CONTROLLER_OAUTH_TOKEN'), true) }}"
+    aap_validate_certs: "{{ controller_validate_certs | default(lookup('env', 'CONTROLLER_VERIFY_SSL'), true) | default(false, true) | bool }}"
+
+    # Objetos a exportar: Modifica esta lista segun lo que necesites
+    # Opciones: gateway_users, gateway_teams, gateway_organizations, gateway_role_definitions,
+    #           gateway_role_user_assignments, gateway_role_team_assignments,
+    #           controller_job_templates, controller_inventories, controller_projects, etc.
+    input_tag:
+      - gateway_organizations
+      - gateway_users
+      - gateway_teams
+      - gateway_role_definitions
+      - gateway_role_user_assignments
+      - gateway_role_team_assignments
+
+  pre_tasks:
+    - name: Validar parametros de conexion
+      ansible.builtin.assert:
+        that:
+          - aap_hostname | length > 0
+          - aap_hostname is match('^https?://')
+          - aap_token | length > 0
+        fail_msg: >-
+          Faltan parametros de conexion. Define CONTROLLER_HOST (con https://) y
+          CONTROLLER_OAUTH_TOKEN como variables de entorno, o pasa
+          -e controller_hostname=... -e controller_oauthtoken=...
+        quiet: true
+
+  roles:
+    - role: infra.aap_configuration_extended.filetree_create

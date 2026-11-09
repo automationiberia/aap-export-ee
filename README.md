@@ -14,6 +14,7 @@ quay.io/automationiberia/aap-export-ee:2.6.0
 | **Plataforma Objetivo** | Red Hat Ansible Automation Platform (AAP) 2.6 |
 | **Imagen Base** | `registry.redhat.io/ansible-automation-platform-26/ee-minimal-rhel9:latest` |
 | **Ansible Core** | `ansible-core 2.16.x` |
+| **Colecciones** | `infra.aap_configuration_extended` 4.13.0, `infra.aap_configuration` 4.11.0, `ansible.platform` 2.7.20260930, `ansible.controller` 4.8.12, `ansible.eda` 2.13.0, `ansible.hub` 1.1.2 |
 | **Python Runtime** | `Python 3.12` |
 | **Herramienta de Build** | `ansible-builder` v3 (`version: 3`) |
 | **Motor de Contenedores** | Podman |
@@ -36,8 +37,8 @@ Este EE incluye en su definición dos parches automatizados necesarios para la i
 
 Instalación de utilidades en el host de ejecución:
 
-    dnf install -y podman git sqlite-libs
-    dnf install -y ansible-builder ansible-navigator
+    subscription-manager repos --enable ansible-automation-platform-2.6-for-rhel-9-x86_64-rpms
+    dnf install -y podman git ansible-navigator ansible-builder   # ansible-builder solo para compilar
 
 Autenticación en el registro certificado de Red Hat (para la compilación):
 
@@ -84,25 +85,72 @@ Si no deseas compilar localmente, puedes descargar directamente la imagen precom
 
 ## 📖 Uso: Exportar RBAC (Usuarios, Equipos y Permisos)
 
-1. Crear la carpeta de salida en el host:
+Lanza los comandos **desde la raíz del repositorio clonado**. El fichero `ansible-navigator.yml` del repo ya configura la imagen, el modo stdout, `--network=host`, la política de descarga y el paso de las variables `CONTROLLER_*` al contenedor. El token se pasa por variable de entorno para que no quede en el historial de bash.
 
-    mkdir -p /root/aap-export-output
-
-2. Copiar y ajustar el playbook de exportación:
-
-    cp export-users-roles.yml.example export-users-roles.yml
-
-3. Lanzar la extracción con `ansible-navigator`:
+    mkdir -p ~/aap-export-output
+    export CONTROLLER_HOST=https://<TU_AAP_GATEWAY_FQDN>
+    export CONTROLLER_VERIFY_SSL=false
+    read -rsp "Token: " CONTROLLER_OAUTH_TOKEN; echo; export CONTROLLER_OAUTH_TOKEN
 
     ansible-navigator run export-users-roles.yml \
-      -m stdout \
-      --eei quay.io/automationiberia/aap-export-ee:2.6.0 \
-      --pp missing \
-      --eev /root/aap-export-output:/output_data:Z \
-      --container-options="--network=host" \
-      -e "controller_hostname=https://<TU_AAP_GATEWAY_FQDN>" \
-      -e "controller_oauthtoken=<TU_OAUTH_TOKEN>" \
-      -e "controller_validate_certs=false"
+      --eev $HOME/aap-export-output:/output_data:Z
+
+> La carpeta de salida tiene que ser accesible para el usuario que lanza el comando. Un usuario no root no puede usar `/root/...` (`PermissionError: [Errno 13]`).
+
+> ⚠️ En los comandos de varias líneas, cada línea salvo la última debe terminar en `\` **sin espacios detrás**. Si no, bash ejecuta cada línea por separado y verás errores como `-m: command not found`.
+
+---
+
+## 📤 Qué se genera
+
+    aap-export-output/
+    ├── env_variables.yml                    # Plantilla de passwords (CHANGE_ME) para importar
+    ├── gateway_organizations.yaml           # Organizaciones
+    ├── gateway_users.yaml                   # Usuarios locales (password -> {{ vaulted_... }})
+    ├── gateway_teams.yaml                   # Equipos y su organización
+    ├── gateway_role_definitions.yaml        # Solo roles personalizados
+    ├── gateway_role_user_assignments.yaml   # usuario + rol + objeto
+    └── gateway_role_team_assignments.yaml   # equipo + rol + objeto
+
+- Ejemplo completo con datos ficticios: [`examples/output/`](examples/output/)
+- Explicación campo a campo: [`docs/output-reference.md`](docs/output-reference.md)
+
+La API nunca devuelve passwords, así que en `gateway_users.yaml` se sustituyen por variables (`{{ vaulted_gateway_users_<usuario>_password }}`) y en `env_variables.yml` se genera la lista de esas variables para rellenarla al importar.
+
+---
+
+## 📥 Importar en otro AAP
+
+`import-users-roles.yml` carga los ficheros del export y los aplica con `infra.aap_configuration.dispatch` en el orden correcto (role definitions → organizaciones → equipos → usuarios → asignaciones). Además:
+
+- Convierte `gateway_organizations` a `aap_organizations`, que es lo que lee `dispatch`. Sin ese cambio, las organizaciones no se importarían y no habría ningún aviso.
+- Excluye usuarios de `import_exclude_users` (por defecto `admin`, para no cambiar la password del admin del destino).
+- Falla antes de tocar nada si falta alguna password o si sigue a `CHANGE_ME`.
+
+Pasos:
+
+    # 1. Rellenar las passwords del entorno destino
+    vi ~/aap-export-output/env_variables.yml
+
+    # 2. Apuntar al AAP de DESTINO
+    export CONTROLLER_HOST=https://<AAP_DESTINO>
+    export CONTROLLER_VERIFY_SSL=false
+    read -rsp "Token: " CONTROLLER_OAUTH_TOKEN; echo; export CONTROLLER_OAUTH_TOKEN
+
+    # 3. Probar primero en simulación (--check)
+    ansible-navigator run import-users-roles.yml \
+      --eev $HOME/aap-export-output:/output_data:Z \
+      -e @/output_data/env_variables.yml \
+      --check
+
+    # 4. Aplicar (el mismo comando sin --check)
+    ansible-navigator run import-users-roles.yml \
+      --eev $HOME/aap-export-output:/output_data:Z \
+      -e @/output_data/env_variables.yml
+
+> En `--check` los pasos de asignaciones pueden fallar si las organizaciones, equipos o usuarios aún no existen en el destino, porque en simulación no se crean.
+
+> 🔒 `env_variables.yml` contiene passwords en claro una vez relleno. Bórralo después de importar o cífralo con `ansible-vault encrypt` y añade `--ask-vault-pass` a los comandos.
 
 ---
 
@@ -125,6 +173,10 @@ Modificando la lista `input_tag` en el playbook, este EE puede extraer:
     ├── ansible.cfg.example              # Plantilla para Automation Hub
     ├── bindep.txt                       # Paquetes RPM de sistema y compilación
     ├── execution-environment.yml         # Definición del EE con hotfixes integrados
-    ├── export-users-roles.yml.example   # Playbook de ejemplo para exportar RBAC
+    ├── ansible-navigator.yml            # Configuración por defecto de ansible-navigator
+    ├── export-users-roles.yml           # Playbook para exportar RBAC
+    ├── import-users-roles.yml           # Playbook para importar RBAC en otro AAP
+    ├── docs/output-reference.md         # Qué contiene cada fichero exportado
+    ├── examples/output/                 # Export de ejemplo (datos ficticios)
     ├── requirements.txt                 # Dependencias Python
-    └── requirements.yml                 # Colecciones Ansible (CaC suite)
+    └── requirements.yml                 # Colecciones Ansible (versiones fijadas)

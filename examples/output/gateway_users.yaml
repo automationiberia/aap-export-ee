@@ -1,0 +1,27 @@
+---
+aap_user_accounts:
+  - username: "admin"
+    email: "admin@example.com"
+    first_name: ""
+    last_name: ""
+    password: "{{ vaulted_gateway_users_admin_password }}"
+    is_superuser: "True"
+    authenticators: [1]
+    authenticator_uid: "admin"
+  - username: "ana.garcia"
+    email: "ana.garcia@example.com"
+    first_name: "Ana"
+    last_name: "Garcia"
+    password: "{{ vaulted_gateway_users_ana_garcia_password }}"
+    is_superuser: "False"
+    authenticators: [1]
+    authenticator_uid: "ana.garcia"
+  - username: "svc-cicd"
+    email: ""
+    first_name: ""
+    last_name: ""
+    password: "{{ vaulted_gateway_users_svc_cicd_password }}"
+    is_superuser: "False"
+    authenticators: [1]
+    authenticator_uid: "svc-cicd"
+...

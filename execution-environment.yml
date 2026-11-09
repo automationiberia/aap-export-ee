@@ -29,6 +29,8 @@ additional_build_steps:
   append_final:
     - RUN ln -sf /usr/bin/python3.12 /usr/bin/python3
     # FIX 1: Corregir leading slash en infra.aap_configuration_extended
-    - RUN sed -i "s|'/api/gateway/v1/role_definitions/'|'api/gateway/v1/role_definitions/'|g" /usr/share/ansible/collections/ansible_collections/infra/aap_configuration_extended/roles/filetree_create/tasks/gateway_role_definitions.yml
+    #   (falla el build si el patron ya no existe y el fichero sigue teniendo la barra inicial)
+    - RUN F=/usr/share/ansible/collections/ansible_collections/infra/aap_configuration_extended/roles/filetree_create/tasks/gateway_role_definitions.yml && sed -i "s|'/api/gateway/v1/role_definitions/'|'api/gateway/v1/role_definitions/'|g" "$F" && ! grep -q "'/api/gateway/v1/role_definitions/'" "$F"
     # FIX 2: Añadir self.retryable = False en PlatformError para evitar enmascarar excepciones en ansible.platform
-    - RUN python3 -c 'path="/usr/share/ansible/collections/ansible_collections/ansible/platform/plugins/plugin_utils/platform/exceptions.py"; f=open(path,"r"); c=f.read(); f.close(); c=c.replace("self.details = details or {}", "self.details = details or {}\n        self.retryable = False", 1); f=open(path,"w"); f.write(c); f.close()'
+    #   (idempotente; falla el build si no encuentra el punto de insercion)
+    - RUN python3 -c 'import sys; p="/usr/share/ansible/collections/ansible_collections/ansible/platform/plugins/plugin_utils/platform/exceptions.py"; c=open(p).read(); a="self.details = details or {}"; ok="self.retryable = False" in c; sys.exit(0) if ok else None; sys.exit("FIX 2 - patron no encontrado en "+p) if a not in c else None; open(p,"w").write(c.replace(a, a+"\n        self.retryable = False", 1))'
