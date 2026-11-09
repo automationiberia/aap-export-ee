@@ -1,0 +1,19 @@
+---
+gateway_role_user_assignments:
+  - role_definition: "Organization Admin"
+    object_ids:
+      - Finanzas
+    user: "ana.garcia"
+  - role_definition: "Organization Member"
+    object_ids:
+      - Operaciones
+    user: "svc-cicd"
+  - role_definition: "Team Member"
+    object_ids:
+      - fin-operadores
+    user: "ana.garcia"
+  - role_definition: "JobTemplate Execute"
+    object_ids:
+      - Pagos - Cierre mensual
+    user: "svc-cicd"
+...

@@ -1,0 +1,19 @@
+---
+# Configuracion por defecto de ansible-navigator para este repo.
+# Con este fichero basta con:
+#   ansible-navigator run export-users-roles.yml --eev /ruta/salida:/output_data:Z
+ansible-navigator:
+  mode: stdout
+  playbook-artifact:
+    enable: false
+  execution-environment:
+    image: quay.io/automationiberia/aap-export-ee:2.6.0
+    pull:
+      policy: missing
+    container-options:
+      - "--network=host"
+    environment-variables:
+      pass:
+        - CONTROLLER_HOST
+        - CONTROLLER_OAUTH_TOKEN
+        - CONTROLLER_VERIFY_SSL

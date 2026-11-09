@@ -1,0 +1,105 @@
+---
+# Importa en un AAP 2.6 (destino) el RBAC exportado con export-users-roles.yml.
+#
+# Prueba primero en modo simulacion:
+#   ansible-navigator run import-users-roles.yml --eev $HOME/aap-export-output:/output_data:Z \
+#     -e @/output_data/env_variables.yml --check
+#
+# Orden aplicado por infra.aap_configuration.dispatch:
+#   role_definitions -> organizations -> teams -> users -> team assignments -> user assignments
+- name: Importar Usuarios, Equipos y Permisos RBAC en AAP 2.6 Gateway
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    # Carpeta (dentro del contenedor) con los .yaml generados por el export
+    import_input_dir: "/output_data"
+
+    aap_hostname: "{{ controller_hostname | default(lookup('env', 'CONTROLLER_HOST'), true) }}"
+    aap_token: "{{ controller_oauthtoken | default(lookup('env', 'CONTROLLER_OAUTH_TOKEN'), true) }}"
+    aap_validate_certs: "{{ controller_validate_certs | default(lookup('env', 'CONTROLLER_VERIFY_SSL'), true) | default(false, true) | bool }}"
+
+    # Usuarios que NO se importan (p.ej. para no pisar la password del admin del destino)
+    import_exclude_users:
+      - admin
+
+    # Limita dispatch a los objetos de identidad/RBAC
+    aap_configuration_dispatcher_roles:
+      - {role: gateway_role_definitions, var: gateway_role_definitions, tags: role_definitions}
+      - {role: gateway_organizations, var: aap_organizations, tags: organizations}
+      - {role: gateway_teams, var: aap_teams, tags: teams}
+      - {role: gateway_users, var: aap_user_accounts, tags: users}
+      - {role: gateway_role_team_assignments, var: gateway_role_team_assignments, tags: role_team_assignments}
+      - {role: gateway_role_user_assignments, var: gateway_role_user_assignments, tags: role_user_assignments}
+
+  pre_tasks:
+    - name: Validar parametros de conexion
+      ansible.builtin.assert:
+        that:
+          - aap_hostname | length > 0
+          - aap_hostname is match('^https?://')
+          - aap_token | length > 0
+        fail_msg: >-
+          Faltan parametros de conexion. Define CONTROLLER_HOST (con https://) y
+          CONTROLLER_OAUTH_TOKEN, o pasa -e controller_hostname=... -e controller_oauthtoken=...
+        quiet: true
+
+    - name: Cargar los ficheros exportados
+      ansible.builtin.include_vars:
+        dir: "{{ import_input_dir }}"
+        files_matching: '^gateway_.*\.ya?ml$'
+        depth: 1
+
+    # Se leen los usernames del fichero en crudo para no resolver las passwords aun
+    - name: Comprobar que estan definidas las passwords de todos los usuarios a importar
+      ansible.builtin.assert:
+        that:
+          - item in vars
+        fail_msg: >-
+          Falta la variable {{ item }}. Rellena env_variables.yml y pasalo con
+          -e @env_variables.yml (o anade el usuario a import_exclude_users)
+        quiet: true
+      loop: >-
+        {{ (lookup('ansible.builtin.file', __users_file) | from_yaml).aap_user_accounts | default([], true)
+           | map(attribute='username') | reject('in', import_exclude_users)
+           | map('lower') | map('regex_replace', '[^a-z0-9]', '_')
+           | map('regex_replace', '^(.*)$', 'vaulted_gateway_users_\1_password') | list }}
+      vars:
+        __users_file: "{{ query('ansible.builtin.fileglob', import_input_dir ~ '/gateway_users.y*ml') | first }}"
+      when: query('ansible.builtin.fileglob', import_input_dir ~ '/gateway_users.y*ml') | length > 0
+
+    # Al manipular aap_user_accounts Ansible resuelve TODAS las passwords "{{ vaulted_... }}",
+    # tambien las de los usuarios excluidos. Se les da un valor ficticio para que no fallen
+    # (nunca se usa: esos usuarios se eliminan de la lista a continuacion).
+    - name: Definir password ficticia para los usuarios excluidos
+      ansible.builtin.set_fact:
+        "{{ 'vaulted_gateway_users_' ~ (item | lower | regex_replace('[^a-z0-9]', '_')) ~ '_password' }}": "EXCLUDED"
+      loop: "{{ import_exclude_users }}"
+
+    # Sin default([]) sobre listas cargadas: un default() ocultaria una password
+    # no definida y vaciaria la lista sin avisar.
+    - name: Adaptar claves del export a las que espera dispatch y excluir usuarios
+      ansible.builtin.set_fact:
+        # filetree_create escribe 'gateway_organizations' pero dispatch lee 'aap_organizations'
+        aap_organizations: "{{ gateway_organizations if 'gateway_organizations' in vars else [] }}"
+        aap_user_accounts: >-
+          {{ (aap_user_accounts if 'aap_user_accounts' in vars else [])
+             | rejectattr('username', 'in', import_exclude_users) | list }}
+        gateway_role_user_assignments: >-
+          {{ (gateway_role_user_assignments if 'gateway_role_user_assignments' in vars else [])
+             | rejectattr('user', 'in', import_exclude_users) | list }}
+      no_log: true
+
+    - name: Comprobar que no quedan passwords a CHANGE_ME
+      ansible.builtin.assert:
+        that:
+          - aap_user_accounts | selectattr('password', 'eq', 'CHANGE_ME') | list | length == 0
+        fail_msg: >-
+          Usuarios con password sin rellenar (CHANGE_ME):
+          {{ aap_user_accounts | selectattr('password', 'eq', 'CHANGE_ME') | map(attribute='username') | join(', ') }}.
+          Rellena env_variables.yml y pasalo con -e @env_variables.yml
+        quiet: true
+
+  roles:
+    - role: infra.aap_configuration.dispatch

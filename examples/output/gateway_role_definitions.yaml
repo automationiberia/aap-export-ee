@@ -1,0 +1,8 @@
+---
+gateway_role_definitions:
+  - name: "JobTemplate Launcher Readonly"
+    description: "Ver y lanzar job templates sin poder editarlos"
+    permissions:
+      - awx.view_jobtemplate
+      - awx.execute_jobtemplate
+    content_type: "awx.jobtemplate"

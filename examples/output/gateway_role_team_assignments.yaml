@@ -1,0 +1,19 @@
+---
+gateway_role_team_assignments:
+  - role_definition: "Organization Member"
+    team: "fin-operadores"
+    assignment_objects:
+      - name: Finanzas
+        type: organizations
+  - role_definition: "JobTemplate Launcher Readonly"
+    team: "fin-operadores"
+    assignment_objects:
+      - name: Pagos - Cierre mensual
+        type: awx.jobtemplate
+        organization: Finanzas
+  - role_definition: "Organization Admin"
+    team: "ops-admins"
+    assignment_objects:
+      - name: Operaciones
+        type: organizations
+...
